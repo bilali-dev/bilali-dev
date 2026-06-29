@@ -1,16 +1,28 @@
-## Hi there 👋
 
-<!--
-**bilali-dev/bilali-dev** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+# Hi there, I'm SB Camará! 👋
 
-Here are some ideas to get you started:
+I am a **Python Developer & Automation Specialist** focused on building intelligent backend workflows, process automation, and data optimization solutions.
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+---
+
+### 🛠️ Core Expertise & Tech Stack
+
+*   **Languages:** Python (Advanced)
+*   **Automation & Scripting:** Task scheduling, Workflow optimization, Data entry automation
+*   **Web Scraping & APIs:** JSON parsing, REST APIs, Custom data extraction
+*   **Data Processing:** Pandas, Excel/Spreadsheet structuring, Data clean-up pipelines
+
+---
+
+### 🚀 Featured Project
+
+📁 **[Python Automation Workflow](https://github.com/bilali-dev/python-automation)**
+> A practical script designed to fetch, parse, and structure complex JSON API payloads directly into formatted Excel spreadsheets for business optimization.
+
+---
+
+### 📈 Let's Connect!
+
+*   💼 **LinkedIn:** [Connect with me on LinkedIn](https://www.linkedin.com/in/sb-camará-640b0641a)
+*   🌍 **Location:** Bissau, Guinea-Bissau (Available for Global Remote Projects)
+*   ⚡ **Fulfillment:** Turning manual, repetitive tasks into fast, reliable automated scripts.
