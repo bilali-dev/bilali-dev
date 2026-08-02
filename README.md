@@ -9,15 +9,19 @@ I am a **Python Developer & Automation Specialist** focused on building intellig
 
 *   **Languages:** Python (Advanced)
 *   **Automation & Scripting:** Task scheduling, Workflow optimization, Data entry automation
+*   **No-Code/Low-Code Automation:** n8n, Make (Integromat), Zapier
 *   **Web Scraping & APIs:** JSON parsing, REST APIs, Custom data extraction
 *   **Data Processing:** Pandas, Excel/Spreadsheet structuring, Data clean-up pipelines
 
 ---
 
-### 🚀 Featured Project
+### 🚀 Featured Projects
 
 📁 **[Python Automation Workflow](https://github.com/bilali-dev/python-automation)**
 > A practical script designed to fetch, parse, and structure complex JSON API payloads directly into formatted Excel spreadsheets for business optimization.
+
+📁 **[Automation Projects — n8n, Make & Zapier](./automation-projects)**
+> A collection of no-code/low-code automation workflows (API syncs, lead notifications, form-to-spreadsheet pipelines) built with n8n, Make and Zapier.
 
 ---
 
