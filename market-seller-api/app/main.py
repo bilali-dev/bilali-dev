@@ -1,26 +1,36 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, HttpUrl, field_validator
+from contextlib import asynccontextmanager
 
-from app.errors import FetchPageError, ParsePageError, UnsupportedMarketplaceError
-from app.models import ExtractionResult
-from app.services.extractor import extract_from_url
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-app = FastAPI(title="Marketplace Seller API", version="0.1.0")
+from app.config import settings
+from app.db import init_db
+from app.routers import billing, extract, monitors, signup, usage
 
-ALLOWED_SCHEMES = {"http", "https"}
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, max_bytes: int) -> None:
+        super().__init__(app)
+        self.max_bytes = max_bytes
+
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length is not None and int(content_length) > self.max_bytes:
+            return JSONResponse({"detail": "Request body too large."}, status_code=413)
+        return await call_next(request)
 
 
-class ExtractRequest(BaseModel):
-    url: HttpUrl
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
-    @field_validator("url")
-    @classmethod
-    def validate_scheme(cls, value: HttpUrl) -> HttpUrl:
-        if value.scheme not in ALLOWED_SCHEMES:
-            raise ValueError("Only http and https URLs are supported.")
-        return value
+
+app = FastAPI(title="Marketplace Seller API", version="0.2.0", lifespan=lifespan)
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_size_bytes)
 
 
 @app.get("/health")
@@ -28,12 +38,8 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/v1/extract", response_model=ExtractionResult)
-def extract(payload: ExtractRequest) -> ExtractionResult:
-    url = str(payload.url)
-    try:
-        return extract_from_url(url)
-    except UnsupportedMarketplaceError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except (FetchPageError, ParsePageError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+app.include_router(signup.router)
+app.include_router(extract.router)
+app.include_router(usage.router)
+app.include_router(monitors.router)
+app.include_router(billing.router)

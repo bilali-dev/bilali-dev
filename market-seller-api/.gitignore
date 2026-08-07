@@ -6,3 +6,5 @@ __pycache__/
 output/*.json
 output/*.csv
 .env
+*.db
+tests/test_market_seller_api.db
