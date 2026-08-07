@@ -1,4 +1,4 @@
-.PHONY: install test lint run worker docker-build docker-run compose-up compose-down
+.PHONY: install test lint run worker migrate makemigration docker-build docker-run compose-up compose-down
 
 install:
 	python -m pip install --upgrade pip
@@ -15,6 +15,13 @@ run:
 
 worker:
 	python -m app.worker
+
+migrate:
+	alembic upgrade head
+
+# Usage: make makemigration m="add column foo to bar"
+makemigration:
+	alembic revision --autogenerate -m "$(m)"
 
 docker-build:
 	docker build -t market-seller-api .

@@ -25,8 +25,9 @@ market-seller-api/
 │   ├── config.py              # configuração via variáveis de ambiente
 │   ├── errors.py              # exceções do domínio de extração
 │   ├── models.py              # modelos Pydantic do resultado de extração
+│   ├── time_utils.py          # utcnow() naive — consistente entre SQLite e Postgres
 │   ├── db.py                  # engine/sessão SQLModel
-│   ├── db_models.py           # tabelas: Customer, ApiKey, Monitor, MonitorEvent, UsageEvent
+│   ├── db_models.py           # tabelas: Customer, ApiKey, Monitor, MonitorEvent, UsageEvent, WebhookDelivery
 │   ├── auth.py                 # autenticação por API key (hash + prefixo)
 │   ├── plans.py                 # planos, limites e contagem de uso mensal
 │   ├── rate_limit.py             # limite de requisições por chave (em memória)
@@ -38,7 +39,7 @@ market-seller-api/
 │   │   ├── fetcher.py          # download de HTML
 │   │   ├── extractor.py        # coordenação do fluxo de extração
 │   │   ├── export.py           # exportação JSON/CSV (CLI)
-│   │   ├── webhooks.py         # assinatura HMAC e envio de webhooks
+│   │   ├── webhooks.py         # assinatura HMAC + entrega com retry/backoff
 │   │   └── monitor_runner.py   # comparação de resultados e geração de eventos
 │   └── routers/
 │       ├── signup.py           # POST /v1/signup
@@ -46,9 +47,11 @@ market-seller-api/
 │       ├── usage.py            # GET /v1/usage
 │       ├── monitors.py         # CRUD de monitores
 │       └── billing.py          # checkout e webhook do Stripe
+├── migrations/                # Alembic — versões do schema (fonte da verdade em produção)
+├── alembic.ini
 ├── scripts/save_page.py       # baixa uma página real para estudo local
 ├── tests/                     # testes automatizados (sem depender de rede/Stripe reais)
-├── docker-compose.yml         # api + worker + Postgres
+├── docker-compose.yml         # migrate + api + worker + Postgres
 └── output/                    # resultados exportados pela CLI (ignorado pelo Git)
 ```
 
@@ -65,6 +68,32 @@ cp .env.example .env             # ajuste os valores conforme necessário
 Por padrão a aplicação usa SQLite (`DATABASE_URL=sqlite:///./market_seller_api.db`),
 suficiente para desenvolvimento local e para os testes. Em produção, aponte
 `DATABASE_URL` para PostgreSQL (veja `docker-compose.yml`).
+
+## Migrações (Alembic)
+
+O schema é versionado por Alembic — `migrations/versions/` é a fonte da
+verdade, não o `create_all()` do SQLModel. Antes de rodar a API pela
+primeira vez (ou depois de puxar uma mudança de schema):
+
+```bash
+alembic upgrade head
+# ou: make migrate
+```
+
+Ao alterar um modelo em `app/db_models.py`, gere a migração correspondente:
+
+```bash
+alembic revision --autogenerate -m "descreva a mudança"
+# ou: make makemigration m="descreva a mudança"
+```
+
+Sempre revise o arquivo gerado antes de commitar — o autogenerate detecta a
+maioria das mudanças de tabela/coluna/índice, mas não renomeações nem
+mudanças de dados. Em desenvolvimento local com SQLite, o próprio processo
+da API ainda cria as tabelas que faltarem ao subir (conveniência para quem
+só quer rodar `uvicorn` sem aprender Alembic primeiro); isso é apenas uma
+rede de segurança — não aplica migrações a tabelas já existentes. Produção
+e Docker Compose sempre rodam `alembic upgrade head` explicitamente.
 
 ## Testes
 
@@ -113,9 +142,11 @@ curl -X POST http://127.0.0.1:8000/v1/signup \
   -d '{"email":"cliente@example.com"}'
 ```
 
-A resposta traz `api_key` uma única vez (`sk_live_...`). Apenas o hash é
-guardado no servidor — se a chave for perdida, é preciso gerar outra conta ou
-(numa evolução futura) um endpoint de rotação de chaves.
+A resposta traz `api_key` e `webhook_secret` uma única vez. Apenas o hash da
+`api_key` é guardado no servidor; se a chave for perdida, é preciso gerar
+outra conta ou (numa evolução futura) um endpoint de rotação de chaves. O
+`webhook_secret` é usado para verificar a assinatura HMAC dos webhooks de
+monitorização (seção 4) — guarde-o também.
 
 ### 2. Extrair dados de um produto
 
@@ -157,9 +188,19 @@ curl -X POST http://127.0.0.1:8000/v1/monitors \
 
 O `app/worker.py` roda em processo separado, procura monitores vencidos,
 compara o resultado novo com o anterior (preço, disponibilidade, avaliação,
-número de opiniões, nome do vendedor) e envia um webhook assinado por
-`WEBHOOK_SECRET` (cabeçalho `X-Signature-256`, HMAC-SHA256) para cada campo
-alterado. `GET/DELETE /v1/monitors/{id}` e `GET /v1/monitors` completam o CRUD.
+número de opiniões, nome do vendedor) e envia um webhook para cada campo
+alterado. Cada webhook é assinado com o `webhook_secret` **daquele
+cliente** (cabeçalho `X-Signature-256`, HMAC-SHA256) — não um segredo
+global, então o vazamento da chave de um cliente não permite forjar
+webhooks para outro. `WEBHOOK_SECRET` no `.env` só serve de fallback se um
+monitor referenciar um cliente que não existe mais.
+
+A entrega tenta até 3 vezes com backoff (1s, depois 3s) antes de desistir.
+Toda tentativa — sucesso ou falha — fica registrada em `WebhookDelivery`
+(`url`, `success`, `attempts`, `last_error`), útil para diagnosticar
+integrações de clientes sem precisar reproduzir o problema.
+
+`GET/DELETE /v1/monitors/{id}` e `GET /v1/monitors` completam o CRUD.
 
 ### 5. Planos
 
@@ -219,10 +260,12 @@ docker run --rm -p 8000:8000 market-seller-api
 docker compose up --build
 ```
 
-Sobe três serviços: `db` (PostgreSQL), `api` (`uvicorn`, porta 8000) e
-`worker` (`python -m app.worker`, processa monitores vencidos). Configure
-`WEBHOOK_SECRET` e as variáveis `STRIPE_*` num `.env` na raiz do projeto
-antes de subir em produção.
+Sobe quatro serviços: `db` (PostgreSQL), `migrate` (roda `alembic upgrade
+head` uma vez e sai), `api` (`uvicorn`, porta 8000) e `worker` (`python -m
+app.worker`, processa monitores vencidos). `api` e `worker` só iniciam
+depois que `migrate` termina com sucesso, então o schema nunca é criado por
+dois processos ao mesmo tempo. Configure `WEBHOOK_SECRET` e as variáveis
+`STRIPE_*` num `.env` na raiz do projeto antes de subir em produção.
 
 ## Aviso legal
 

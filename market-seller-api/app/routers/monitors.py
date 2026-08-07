@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
@@ -10,6 +10,7 @@ from app.auth import get_current_customer
 from app.db import get_session
 from app.db_models import Customer, Monitor
 from app.plans import monitors_count, plan_for
+from app.time_utils import utcnow
 
 router = APIRouter()
 
@@ -78,7 +79,7 @@ def create_monitor(
         url=str(payload.url),
         frequency_minutes=payload.frequency_minutes,
         webhook_url=str(payload.webhook_url) if payload.webhook_url else None,
-        next_check_at=datetime.now(UTC),
+        next_check_at=utcnow(),
     )
     session.add(monitor)
     session.commit()

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from sqlmodel import Session, func, select
 
 from app.db_models import Monitor, UsageEvent
+from app.time_utils import utcnow
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ def plan_for(customer_plan: str) -> Plan:
 
 
 def usage_this_month(session: Session, customer_id: str) -> int:
-    now = datetime.now(UTC)
+    now = utcnow()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     statement = select(func.count(UsageEvent.id)).where(
         UsageEvent.customer_id == customer_id,

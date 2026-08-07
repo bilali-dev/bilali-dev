@@ -13,6 +13,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # One-shot: applies Alembic migrations, then exits. api/worker wait for it
+  # so two processes never race to create the schema at the same time.
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/market_seller_api
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -26,8 +37,8 @@ services:
       STRIPE_PRICE_STARTER: ${STRIPE_PRICE_STARTER:-}
       STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   worker:
     build: .
@@ -36,8 +47,8 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/market_seller_api
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-change-me}
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   db_data:

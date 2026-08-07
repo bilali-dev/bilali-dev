@@ -20,6 +20,7 @@ class SignupResponse(BaseModel):
     email: str
     plan: str
     api_key: str
+    webhook_secret: str
 
 
 @router.post("/v1/signup", response_model=SignupResponse, status_code=201)
@@ -45,4 +46,5 @@ def signup(
         email=customer.email,
         plan=customer.plan,
         api_key=raw_key,
+        webhook_secret=customer.webhook_secret,
     )
