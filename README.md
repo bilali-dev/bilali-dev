@@ -14,9 +14,12 @@ I am a **Python Developer & Automation Specialist** focused on building intellig
 
 ---
 
-### 🚀 Featured Project
+### 🚀 Featured Projects
 
-📁 **[Python Automation Workflow](https://github.com/bilali-dev/python-automation)**
+📦 **[Ecommerce Scraping Toolkit](https://github.com/bilali-dev/python-automation/tree/main/ecommerce-scraping-toolkit)**
+> Catalogue scraper (`requests` + `BeautifulSoup`) that walks a paginated product catalogue — 50 pages, 1,000 products — and exports the results to `.xlsx` with `pandas`. Includes automatic retries, encoding-safe fetching, and progress logging.
+
+📁 **[JSON to Excel Automation](https://github.com/bilali-dev/python-automation/tree/main/json-to-excel-automation)**
 > A practical script designed to fetch, parse, and structure complex JSON API payloads directly into formatted Excel spreadsheets for business optimization.
 
 ---
