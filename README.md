@@ -14,10 +14,38 @@ I am a **Python Developer & Automation Specialist** focused on building intellig
 
 ---
 
-### 🚀 Featured Project
+## 🤖 Featured Project: Telegram Bot + VFS Global Monitor
 
-📁 **[Python Automation Workflow](https://github.com/bilali-dev/python-automation)**
-> A practical script designed to fetch, parse, and structure complex JSON API payloads directly into formatted Excel spreadsheets for business optimization.
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![python-telegram-bot](https://img.shields.io/badge/python--telegram--bot-21.6-26A5E4?logo=telegram&logoColor=white)](https://github.com/python-telegram-bot/python-telegram-bot)
+[![Playwright](https://img.shields.io/badge/Playwright-1.47-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Bot de Telegram com um monitor de vagas do portal da VFS Global: ele
+avisa por mensagem assim que encontra um horario de agendamento
+disponivel, para voce finalizar manualmente. Veja a secao **Estrutura
+do projeto** abaixo para navegar pelo codigo.
+
+### Como rodar
+
+```bash
+git clone https://github.com/bilali-dev/bilali-dev.git
+cd bilali-dev
+./scripts/setup.sh
+```
+
+Depois preencha o arquivo `.env` (criado a partir de `.env.example`)
+com seu token do Telegram e, se for usar o monitor, suas credenciais
+da VFS Global. Detalhes de cada parte em `bot/README.md` e
+`monitor/README.md`.
+
+### 📂 Estrutura do projeto
+
+| Pasta | Descricao |
+|---|---|
+| [`bot/`](bot) | Bot de Telegram (comandos `/start`, `/help`, `/status`) |
+| [`monitor/`](monitor) | Monitor de vagas da VFS Global com alerta via Telegram |
+| [`scripts/`](scripts) | Scripts utilitarios (setup do ambiente) |
 
 ---
 
