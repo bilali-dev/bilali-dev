@@ -1,9 +1,12 @@
 # VFS Monitor — Bot de monitorização e alerta
 
-Verifica periodicamente se há vagas disponíveis para marcação no portal VFS
-Global e envia um alerta via Telegram. Este bot **não** avança a marcação,
+Verifica periodicamente se há vagas disponíveis para marcação de **visto
+nacional** no portal VFS Global (Guiné-Bissau, `visa.vfsglobal.com/gnb/pt/prt/login`),
+para as categorias configuradas em `VISA_CATEGORY_TEXTS` — por omissão,
+**visto de tratamento médico** e **visto de estudo** — e envia um alerta via
+Telegram para cada categoria com vagas. Este bot **não** avança a marcação,
 **não** faz upload de documentos e **não** submete nenhum formulário —
-apenas lê o estado da página.
+apenas lê o estado da página, categoria a categoria.
 
 ## Instalação
 

@@ -36,7 +36,15 @@ load_dotenv()
 VFS_URL = os.getenv("VFS_URL", "https://visa.vfsglobal.com/gnb/pt/prt/login")
 VFS_EMAIL = os.getenv("VFS_EMAIL")
 VFS_PASSWORD = os.getenv("VFS_PASSWORD")
-VISA_CATEGORY_TEXT = os.getenv("VISA_CATEGORY_TEXT", "schengen")
+
+# Lista de categorias de visto nacional a monitorizar, separadas por vírgula.
+# O texto de cada categoria tem de corresponder (parcialmente) ao que aparece
+# na dropdown de categorias do portal.
+VISA_CATEGORY_TEXTS = [
+    c.strip()
+    for c in os.getenv("VISA_CATEGORY_TEXTS", "tratamento médico,estudo").split(",")
+    if c.strip()
+]
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -164,11 +172,15 @@ def fazer_login(driver) -> bool:
     return True
 
 
-def verificar_disponibilidade(driver) -> tuple[bool, str]:
+def verificar_disponibilidade(driver, categoria_texto: str) -> tuple[bool, str]:
     """
-    Navega até à seleção de categoria e verifica o texto da página.
-    Devolve (disponivel: bool, detalhe: str). NÃO avança além desta verificação.
+    Navega até à seleção de uma categoria de visto nacional específica e
+    verifica o texto da página. Devolve (disponivel: bool, detalhe: str).
+    NÃO avança além desta verificação (não clica em "Continuar").
     """
+    driver.get(VFS_URL)
+    delay(3, 5)
+
     driver.execute_script("""
         var elementos = document.querySelectorAll('button, a, div, span');
         for (var i = 0; i < elementos.length; i++) {
@@ -181,28 +193,33 @@ def verificar_disponibilidade(driver) -> tuple[bool, str]:
     """)
     delay(3, 5)
 
-    driver.execute_script(f"""
+    driver.execute_script("""
         var els = document.querySelectorAll('mat-select, .ng-select-container, div[role="combobox"], span');
-        for (var e of els) {{
+        for (var e of els) {
             var t = e.innerText.toLowerCase();
-            if (t.includes('selecione') || t.includes('categoria')) {{
+            if (t.includes('selecione') || t.includes('categoria')) {
                 e.click();
                 break;
-            }}
-        }}
+            }
+        }
     """)
     delay(2, 3)
 
-    driver.execute_script(f"""
+    categoria_encontrada = driver.execute_script("""
+        var alvo = arguments[0];
         var ops = document.querySelectorAll('mat-option, .ng-option, li, span');
-        for (var o of ops) {{
-            if (o.innerText.trim().toLowerCase().includes('{VISA_CATEGORY_TEXT}')) {{
+        for (var o of ops) {
+            if (o.innerText.trim().toLowerCase().includes(alvo)) {
                 o.click();
-                break;
-            }}
-        }}
-    """)
+                return true;
+            }
+        }
+        return false;
+    """, categoria_texto.lower())
     delay(2, 4)
+
+    if not categoria_encontrada:
+        return False, f"Categoria '{categoria_texto}' não encontrada na dropdown (ajusta VISA_CATEGORY_TEXTS)"
 
     texto_pagina = driver.execute_script("return document.body.innerText.toLowerCase();") or ""
 
@@ -215,9 +232,13 @@ def verificar_disponibilidade(driver) -> tuple[bool, str]:
 
 def executar():
     validar_config()
-    log.info("Bot de monitorização VFS iniciado. Intervalo: %ss", CHECK_INTERVAL_SECONDS)
+    log.info(
+        "Bot de monitorização VFS iniciado. Categorias: %s | Intervalo: %ss",
+        ", ".join(VISA_CATEGORY_TEXTS),
+        CHECK_INTERVAL_SECONDS,
+    )
 
-    ultimo_alerta_ts = 0.0
+    ultimo_alerta_ts = {categoria: 0.0 for categoria in VISA_CATEGORY_TEXTS}
 
     while True:
         driver = None
@@ -227,21 +248,27 @@ def executar():
             if not fazer_login(driver):
                 log.error("Login falhou nesta tentativa. A tentar novamente no próximo ciclo.")
             else:
-                disponivel, detalhe = verificar_disponibilidade(driver)
-                log.info("Resultado da verificação: %s", detalhe)
+                for categoria in VISA_CATEGORY_TEXTS:
+                    disponivel, detalhe = verificar_disponibilidade(driver, categoria)
+                    log.info("[%s] Resultado da verificação: %s", categoria, detalhe)
 
-                if disponivel:
-                    agora = time.time()
-                    if agora - ultimo_alerta_ts >= ALERT_COOLDOWN_SECONDS:
-                        mensagem = (
-                            f"🎉 Possível vaga disponível para '{VISA_CATEGORY_TEXT}' "
-                            f"no VFS Global!\nDetetado às {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.\n"
-                            "Vai ao portal e marca manualmente: " + VFS_URL
-                        )
-                        enviar_alerta_telegram(mensagem)
-                        ultimo_alerta_ts = agora
-                    else:
-                        log.info("Vaga ainda detetada, mas dentro do cooldown de alerta — sem novo envio.")
+                    if disponivel:
+                        agora = time.time()
+                        if agora - ultimo_alerta_ts[categoria] >= ALERT_COOLDOWN_SECONDS:
+                            mensagem = (
+                                f"🎉 Possível vaga disponível para visto nacional de '{categoria}' "
+                                f"no VFS Global!\nDetetado às {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.\n"
+                                "Vai ao portal e marca manualmente: " + VFS_URL
+                            )
+                            enviar_alerta_telegram(mensagem)
+                            ultimo_alerta_ts[categoria] = agora
+                        else:
+                            log.info(
+                                "[%s] Vaga ainda detetada, mas dentro do cooldown de alerta — sem novo envio.",
+                                categoria,
+                            )
+
+                    delay(2, 4)
 
         except Exception as exc:
             log.error("Erro durante o ciclo de verificação: %s", exc)
