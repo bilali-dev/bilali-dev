@@ -1,0 +1,53 @@
+name: VFS Visa Monitor
+
+on:
+  schedule:
+    # A cada 15 minutos. O GitHub pode atrasar execuções agendadas em
+    # períodos de carga alta — não é garantido ao minuto exato.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vfs-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: vfs_monitor
+        run: pip install -r requirements.txt
+
+      - name: Run single monitor pass
+        working-directory: vfs_monitor
+        env:
+          VFS_URL: ${{ vars.VFS_URL }}
+          VFS_EMAIL: ${{ secrets.VFS_EMAIL }}
+          VFS_PASSWORD: ${{ secrets.VFS_PASSWORD }}
+          VISA_CATEGORY_TEXTS: ${{ vars.VISA_CATEGORY_TEXTS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ALERT_COOLDOWN_SECONDS: ${{ vars.ALERT_COOLDOWN_SECONDS }}
+          HEADLESS: "true"
+        run: python vfs_monitor.py --once
+
+      - name: Persist alert-cooldown state
+        run: |
+          git config user.name "vfs-monitor-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add vfs_monitor/state.json
+          git diff --cached --quiet || git commit -m "chore: update monitor state [skip ci]"
+          git push

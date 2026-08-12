@@ -28,7 +28,7 @@ Edita o `.env` com as tuas credenciais VFS e os dados do teu bot Telegram.
 3. Abre `https://api.telegram.org/bot<TOKEN>/getUpdates` no browser e
    procura o campo `"chat":{"id": ...}` — esse número é o `TELEGRAM_CHAT_ID`.
 
-## Executar
+## Executar localmente (contínuo)
 
 ```bash
 python vfs_monitor.py
@@ -37,7 +37,55 @@ python vfs_monitor.py
 O script corre em ciclo (mínimo 3 minutos entre verificações, configurável em
 `CHECK_INTERVAL_SECONDS`), regista tudo em `vfs_monitor.log` e envia um alerta
 Telegram sempre que deteta que já não há a mensagem de "sem vagas" — mas
-nunca mais do que uma vez a cada `ALERT_COOLDOWN_SECONDS`.
+nunca mais do que uma vez a cada `ALERT_COOLDOWN_SECONDS`. O estado dos
+cooldowns fica em `state.json`.
+
+## Correr na nuvem (GitHub Actions) — não depende do teu computador estar ligado
+
+Já existe um workflow em `.github/workflows/vfs_monitor.yml` que corre uma
+verificação (`python vfs_monitor.py --once`) de 15 em 15 minutos, 24/7,
+incluindo de madrugada, sem precisares de deixar nada aberto localmente.
+
+### 1. Configurar segredos (dados sensíveis)
+
+No repositório GitHub: **Settings → Secrets and variables → Actions → Secrets**,
+cria:
+
+| Nome | Valor |
+|---|---|
+| `VFS_EMAIL` | o teu email de login VFS |
+| `VFS_PASSWORD` | a tua password VFS |
+| `TELEGRAM_BOT_TOKEN` | token do bot Telegram |
+| `TELEGRAM_CHAT_ID` | o teu chat id do Telegram |
+
+### 2. Configurar variáveis (dados não sensíveis, opcional)
+
+Na mesma página, separador **Variables**, podes opcionalmente definir:
+
+| Nome | Exemplo | Default se não definires |
+|---|---|---|
+| `VFS_URL` | `https://visa.vfsglobal.com/gnb/pt/prt/login` | já é este o valor por omissão |
+| `VISA_CATEGORY_TEXTS` | `tratamento médico,estudo` | já é este o valor por omissão |
+| `ALERT_COOLDOWN_SECONDS` | `1800` | 1800 (30 min) |
+
+### 3. Ativar
+
+O workflow já corre automaticamente por agendamento assim que estiver na
+branch principal (`main`). Podes testar manualmente em **Actions → VFS Visa
+Monitor → Run workflow**, e ver os logs de cada execução aí.
+
+### Notas sobre o modo cloud
+
+- Cada execução é um browser novo (sem sessão persistente) — por isso faz
+  sempre login com email/password. O `state.json` (cooldown de alertas) é
+  atualizado e enviado de volta (`git push`) pelo próprio workflow no fim de
+  cada execução.
+- O GitHub **desativa automaticamente workflows agendados após 60 dias sem
+  atividade no repositório** — se isso acontecer, volta a ativar manualmente
+  em Actions, ou faz um commit qualquer no repositório de vez em quando.
+- Repositórios de perfil (`utilizador/utilizador`) têm de ser públicos, o que
+  dá minutos de Actions gratuitos e ilimitados nos runners padrão. Se algum
+  dia tornares o repo privado, verifica o limite gratuito de minutos/mês.
 
 ## Importante
 

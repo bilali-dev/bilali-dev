@@ -18,6 +18,7 @@ de inspecionares a página real no teu browser (DevTools -> Inspecionar),
 porque a estrutura exata do DOM do portal pode mudar.
 """
 
+import json
 import logging
 import os
 import random
@@ -62,6 +63,11 @@ HEADLESS = os.getenv("HEADLESS", "false").lower() == "true"
 PROFILE_DIR = os.path.abspath("vfs_monitor_profile")
 LOG_FILE = os.path.abspath("vfs_monitor.log")
 
+# Guarda o timestamp do último alerta por categoria, para o cooldown
+# funcionar mesmo quando cada verificação corre num processo novo (ex: cron
+# do GitHub Actions, onde não há memória partilhada entre execuções).
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
+
 # Frases que indicam que NÃO há vagas (em PT e EN). Ajusta conforme o texto
 # real que vires na página.
 FRASES_INDISPONIVEL = [
@@ -103,6 +109,24 @@ def validar_config():
 
 def delay(min_s=2.0, max_s=4.5):
     time.sleep(random.uniform(min_s, max_s))
+
+
+def carregar_estado() -> dict:
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            log.warning("Não foi possível ler %s (%s) — a começar com estado vazio.", STATE_FILE, exc)
+    return {}
+
+
+def guardar_estado(estado: dict):
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(estado, f, indent=2, ensure_ascii=False)
+    except OSError as exc:
+        log.error("Não foi possível guardar %s: %s", STATE_FILE, exc)
 
 
 def enviar_alerta_telegram(mensagem: str):
@@ -230,7 +254,66 @@ def verificar_disponibilidade(driver, categoria_texto: str) -> tuple[bool, str]:
     return True, "Nenhuma frase de indisponibilidade encontrada — possíveis vagas!"
 
 
-def executar():
+def ciclo_unico(estado: dict) -> dict:
+    """
+    Faz uma passagem completa: login + verificação de todas as categorias.
+    Recebe e devolve o dicionário de estado (timestamps do último alerta por
+    categoria), para o chamador decidir se o persiste em disco.
+    """
+    driver = None
+    try:
+        driver = criar_driver()
+
+        if not fazer_login(driver):
+            log.error("Login falhou nesta execução.")
+            return estado
+
+        for categoria in VISA_CATEGORY_TEXTS:
+            disponivel, detalhe = verificar_disponibilidade(driver, categoria)
+            log.info("[%s] Resultado da verificação: %s", categoria, detalhe)
+
+            if disponivel:
+                agora = time.time()
+                ultimo = estado.get(categoria, 0.0)
+                if agora - ultimo >= ALERT_COOLDOWN_SECONDS:
+                    mensagem = (
+                        f"🎉 Possível vaga disponível para visto nacional de '{categoria}' "
+                        f"no VFS Global!\nDetetado às {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.\n"
+                        "Vai ao portal e marca manualmente: " + VFS_URL
+                    )
+                    enviar_alerta_telegram(mensagem)
+                    estado[categoria] = agora
+                else:
+                    log.info(
+                        "[%s] Vaga ainda detetada, mas dentro do cooldown de alerta — sem novo envio.",
+                        categoria,
+                    )
+
+            delay(2, 4)
+
+    except Exception as exc:
+        log.error("Erro durante o ciclo de verificação: %s", exc)
+    finally:
+        if driver is not None:
+            driver.quit()
+
+    return estado
+
+
+def executar_uma_vez():
+    """Modo usado por schedulers externos (ex: cron do GitHub Actions)."""
+    validar_config()
+    log.info(
+        "Verificação única. Categorias: %s",
+        ", ".join(VISA_CATEGORY_TEXTS),
+    )
+    estado = carregar_estado()
+    estado = ciclo_unico(estado)
+    guardar_estado(estado)
+
+
+def executar_continuo():
+    """Modo usado para correr localmente/num VPS num processo de longa duração."""
     validar_config()
     log.info(
         "Bot de monitorização VFS iniciado. Categorias: %s | Intervalo: %ss",
@@ -238,43 +321,11 @@ def executar():
         CHECK_INTERVAL_SECONDS,
     )
 
-    ultimo_alerta_ts = {categoria: 0.0 for categoria in VISA_CATEGORY_TEXTS}
+    estado = carregar_estado()
 
     while True:
-        driver = None
-        try:
-            driver = criar_driver()
-
-            if not fazer_login(driver):
-                log.error("Login falhou nesta tentativa. A tentar novamente no próximo ciclo.")
-            else:
-                for categoria in VISA_CATEGORY_TEXTS:
-                    disponivel, detalhe = verificar_disponibilidade(driver, categoria)
-                    log.info("[%s] Resultado da verificação: %s", categoria, detalhe)
-
-                    if disponivel:
-                        agora = time.time()
-                        if agora - ultimo_alerta_ts[categoria] >= ALERT_COOLDOWN_SECONDS:
-                            mensagem = (
-                                f"🎉 Possível vaga disponível para visto nacional de '{categoria}' "
-                                f"no VFS Global!\nDetetado às {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.\n"
-                                "Vai ao portal e marca manualmente: " + VFS_URL
-                            )
-                            enviar_alerta_telegram(mensagem)
-                            ultimo_alerta_ts[categoria] = agora
-                        else:
-                            log.info(
-                                "[%s] Vaga ainda detetada, mas dentro do cooldown de alerta — sem novo envio.",
-                                categoria,
-                            )
-
-                    delay(2, 4)
-
-        except Exception as exc:
-            log.error("Erro durante o ciclo de verificação: %s", exc)
-        finally:
-            if driver is not None:
-                driver.quit()
+        estado = ciclo_unico(estado)
+        guardar_estado(estado)
 
         espera = CHECK_INTERVAL_SECONDS + random.uniform(0, 30)
         log.info("Próxima verificação em ~%.0fs.", espera)
@@ -283,6 +334,9 @@ def executar():
 
 if __name__ == "__main__":
     try:
-        executar()
+        if "--once" in sys.argv:
+            executar_uma_vez()
+        else:
+            executar_continuo()
     except KeyboardInterrupt:
         log.info("Bot interrompido pelo utilizador.")
