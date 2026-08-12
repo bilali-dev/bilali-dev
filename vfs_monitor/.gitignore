@@ -1,0 +1,4 @@
+.env
+vfs_monitor_profile/
+vfs_monitor.log
+__pycache__/
