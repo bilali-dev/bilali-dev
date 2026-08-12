@@ -34,13 +34,13 @@ jobs:
       - name: Run single monitor pass
         working-directory: vfs_monitor
         env:
-          VFS_URL: ${{  https://visa.vfsglobal.com/gnb/pt/prt/login }}
-          VFS_EMAIL: ${{ vladmirgomessoares@gmail.com }}
-          VFS_PASSWORD: ${{ Bilall1820@ }}
-          VISA_CATEGORY_TEXTS: ${{ Visto para Tratamento Médico }}
-          TELEGRAM_BOT_TOKEN: ${{ 8967038160:AAFgxZwLRzqBjtfMVd6rkI0MXpLi_smEKfg }}
-          TELEGRAM_CHAT_ID: ${{ 8763356256 }}
-          ALERT_COOLDOWN_SECONDS: ${{ VAGA ABERTO }}
+          VFS_URL: ${{ vars.VFS_URL }}
+          VFS_EMAIL: ${{ secrets.VFS_EMAIL }}
+          VFS_PASSWORD: ${{ secrets.VFS_PASSWORD }}
+          VISA_CATEGORY_TEXTS: ${{ vars.VISA_CATEGORY_TEXTS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ALERT_COOLDOWN_SECONDS: ${{ vars.ALERT_COOLDOWN_SECONDS }}
           HEADLESS: "true"
         run: python vfs_monitor.py --once
 
